@@ -122,10 +122,10 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 						mp.messageService.SendMessage("Failed to fetch training details: "+err.Error(), "")
 						return
 					}
-					for _, u := range details.Users {
-						if u.Name == name {
+					for _, user := range details.Users {
+						if user.Name == name {
 							idx := slices.IndexFunc(details.Participants, func(u fresh_client.User) bool {
-								return u.ID == u.ID
+								return user.ID == u.ID
 							})
 							if idx != -1 {
 								mu.Lock()
@@ -134,7 +134,7 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 								break
 							}
 							idx = slices.IndexFunc(details.Bench, func(u fresh_client.User) bool {
-								return u.ID == u.ID
+								return user.ID == u.ID
 							})
 							if idx != -1 {
 								mu.Lock()
@@ -142,6 +142,7 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 								mu.Unlock()
 								break
 							}
+							break
 						}
 					}
 				}
