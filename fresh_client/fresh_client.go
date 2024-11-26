@@ -179,7 +179,7 @@ func (fc *FreshClient) Login(location int, startTime time.Time) error {
 	var trainingID int
 
 	for _, training := range trainings {
-		if training.StartTime == startTime {
+		if training.StartTime.Unix() == startTime.Unix() {
 			trainingID = training.ID
 			break
 		}

@@ -51,9 +51,10 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 
 	switch parsedMessage[0] {
 	case "LOGIN":
-		date := time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+		date := time.Now().AddDate(0, 0, 7).Format("2.1.2006")
 		start := "7:00"
 		location := 13
+		timezone, _ := time.LoadLocation("Europe/Prague")
 		if len(parsedMessage) > 1 {
 			start = parsedMessage[1]
 		}
@@ -70,7 +71,7 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 				return
 			}
 		}
-		startTime, err := time.Parse("2006-01-02 15:04", date+" "+start)
+		startTime, err := time.ParseInLocation("2.1.2006 15:04", date+" "+start, timezone)
 		if err != nil {
 			log.Printf("Error parsing time: %v", err)
 			mp.messageService.SendMessage("Invalid time format", "")
@@ -83,7 +84,7 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 			return
 		}
 
-		mp.messageService.SendMessage("Logged in for "+date+" "+start, "")
+		mp.messageService.SendMessage("Logged in for "+startTime.Format("2006-01-02 15:04"), "")
 
 	case "FIND":
 		if len(parsedMessage) < 2 {
