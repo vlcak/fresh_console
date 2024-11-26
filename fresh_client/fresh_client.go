@@ -26,6 +26,7 @@ type FreshClient struct {
 	token      string
 	locations  map[int]Location
 	types      map[int]Type
+	timeZone   *time.Location
 }
 
 type Location struct {
@@ -42,25 +43,24 @@ type Type struct {
 }
 
 type Training struct {
-	ID                 int    `json:"id"`
-	StartTime          int64  `json:"start_time"`
+	ID                 int   `json:"id"`
+	StartTimeUNIX      int64 `json:"start_time"`
+	StartTime          time.Time
 	Trainer            string `json:"trainer"`
 	TrainingLocationID int    `json:"training_location_id"`
 	TrainingTypeID     int    `json:"training_type_id"`
 	Occuppancy         int    `json:"occupancy"`
 }
 
+type User struct {
+	ID int `json:"user_id"`
+}
+
 type TrainingDetails struct {
-	Bench []struct {
-		UserID int `json:"user_id"`
-	} `json:"bench"`
-	Participants []struct {
-		UserID int `json:"user_id"`
-	} `json:"participants"`
-	Trainers []struct {
-		UserID int `json:"user_id"`
-	} `json:"trainers"`
-	Users []struct {
+	Bench        []User `json:"bench"`
+	Participants []User `json:"participants"`
+	Trainers     []User `json:"trainers"`
+	Users        []struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	} `json:"users"`
@@ -79,6 +79,7 @@ func NewFreshClient(token string) *FreshClient {
 		baseURL:    baseURL,
 		token:      token,
 	}
+	fc.timeZone, _ = time.LoadLocation("Europe/Prague")
 	fc.FetchTypes()
 	fc.FetchLocations()
 	return &fc
@@ -130,7 +131,7 @@ func (fc *FreshClient) FetchTypes() ([]Type, error) {
 	return types, nil
 }
 
-func (fc *FreshClient) GetNextTraining(locationID int) ([]Training, error) {
+func (fc *FreshClient) GetNextTrainings(locationID int) ([]Training, error) {
 	resp, err := fc.get(fmt.Sprintf(nextPath, locationID))
 	if err != nil {
 		return nil, err
@@ -140,6 +141,10 @@ func (fc *FreshClient) GetNextTraining(locationID int) ([]Training, error) {
 	err = json.Unmarshal(resp, &trainings)
 	if err != nil {
 		return nil, err
+	}
+
+	for i := range trainings {
+		trainings[i].StartTime = time.UnixMilli(trainings[i].StartTimeUNIX).In(fc.timeZone)
 	}
 
 	return trainings, nil
@@ -166,7 +171,7 @@ func (fc *FreshClient) FetchTrainingDetails(trainingID int) (*TrainingDetails, e
 }
 
 func (fc *FreshClient) Login(location int, startTime time.Time) error {
-	trainings, err := fc.GetNextTraining(location)
+	trainings, err := fc.GetNextTrainings(location)
 	if err != nil {
 		log.Printf("Error getting next training: %v", err)
 		return err
@@ -174,7 +179,7 @@ func (fc *FreshClient) Login(location int, startTime time.Time) error {
 	var trainingID int
 
 	for _, training := range trainings {
-		if training.StartTime == startTime.UnixMilli() {
+		if training.StartTime == startTime {
 			trainingID = training.ID
 			break
 		}

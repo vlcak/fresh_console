@@ -58,7 +58,7 @@ func main() {
 	}
 	c := cron.NewWithLocation(locationPrague)
 	c.AddFunc("0 5 0 * * 2", func() {
-		date := time.Now().AddDate(0, 0, 6).Format("2006-01-02")
+		date := time.Now().In(locationPrague).AddDate(0, 0, 6).Format("2006-01-02")
 		startTime, err := time.Parse("2006-01-02 15:04", date+" 7:00")
 		if err != nil {
 			messageService.SendMessage(fmt.Sprintf("Error parsing time: %v", err), "")

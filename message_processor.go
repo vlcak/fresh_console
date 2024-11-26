@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/newrelic/go-agent/v3/newrelic"
@@ -90,48 +92,85 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 			return
 		}
 		name := strings.Join(parsedMessage[1:], " ")
+		log.Printf("Finding user %s", name)
 
 		mp.freshClient.FetchTypes()
 		locations, err := mp.freshClient.FetchLocations()
-		found := make([]fresh_client.Training, 0)
 		if err != nil {
 			log.Printf("Error fetching locations: %v", err)
 			mp.messageService.SendMessage("Failed to fetch locations: "+err.Error(), "")
 			return
 		}
+		participants := make([]fresh_client.Training, 0)
+		benches := make([]fresh_client.Training, 0)
+		var mu sync.Mutex
+		var wg sync.WaitGroup
 		for _, loc := range locations {
-			trainings, err := mp.freshClient.GetNextTraining(loc.ID)
-			if err != nil {
-				log.Printf("Error getting next training: %v", err)
-				mp.messageService.SendMessage("Failed to get next training: "+err.Error(), "")
-				return
-			}
-			for _, t := range trainings {
-				details, err := mp.freshClient.FetchTrainingDetails(t.ID)
+			wg.Add(1)
+			go func(loc fresh_client.Location) {
+				defer wg.Done()
+				trainings, err := mp.freshClient.GetNextTrainings(loc.ID)
 				if err != nil {
-					log.Printf("Error fetching training details: %v", err)
-					mp.messageService.SendMessage("Failed to fetch training details: "+err.Error(), "")
+					log.Printf("Error getting next training: %v", err)
+					mp.messageService.SendMessage("Failed to get next training: "+err.Error(), "")
 					return
 				}
-				for _, p := range details.Users {
-					if strings.Contains(p.Name, name) {
-						found = append(found, t)
-						break
+				for _, t := range trainings {
+					details, err := mp.freshClient.FetchTrainingDetails(t.ID)
+					if err != nil {
+						log.Printf("Error fetching training details: %v", err)
+						mp.messageService.SendMessage("Failed to fetch training details: "+err.Error(), "")
+						return
+					}
+					for _, u := range details.Users {
+						if u.Name == name {
+							idx := slices.IndexFunc(details.Participants, func(u fresh_client.User) bool {
+								return u.ID == u.ID
+							})
+							if idx != -1 {
+								mu.Lock()
+								participants = append(participants, t)
+								mu.Unlock()
+								break
+							}
+							idx = slices.IndexFunc(details.Bench, func(u fresh_client.User) bool {
+								return u.ID == u.ID
+							})
+							if idx != -1 {
+								mu.Lock()
+								benches = append(benches, t)
+								mu.Unlock()
+								break
+							}
+						}
 					}
 				}
-			}
+			}(loc)
 		}
 
-		if len(found) == 0 {
+		wg.Wait()
+
+		if len(participants) == 0 && len(benches) == 0 {
+			log.Printf("No results found")
 			mp.messageService.SendMessage("No results found", "")
 			return
 		}
 		message := ""
-		for _, t := range found {
-			trainingType := mp.freshClient.GetType(t.TrainingTypeID)
-			trainingStart := time.UnixMilli(t.StartTime)
-			message += fmt.Sprintf("%s %s - %s - %d/%d\n", trainingType.Name, trainingStart.Format("2006-01-02 15:04"), t.Trainer, t.Occuppancy, trainingType.Capacity)
+		if len(participants) > 0 {
+			message += "Participate:\n"
 		}
+		for _, t := range participants {
+			trainingType := mp.freshClient.GetType(t.TrainingTypeID)
+			message += fmt.Sprintf("%s %s - %s - %d/%d\n", trainingType.Name, t.StartTime.Format("2006-01-02 15:04"), t.Trainer, t.Occuppancy, trainingType.Capacity)
+		}
+		if len(benches) > 0 {
+			message += "Bench:\n"
+		}
+		for _, t := range benches {
+			trainingType := mp.freshClient.GetType(t.TrainingTypeID)
+			message += fmt.Sprintf("%s %s - %s - %d/%d\n", trainingType.Name, t.StartTime.Format("2006-01-02 15:04"), t.Trainer, t.Occuppancy, trainingType.Capacity)
+		}
+		log.Printf(message)
 		mp.messageService.SendMessage(message, "")
 	}
 }
