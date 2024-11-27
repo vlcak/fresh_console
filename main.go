@@ -57,6 +57,21 @@ func main() {
 		log.Printf("Error loading timezone: %v", err)
 	}
 	c := cron.NewWithLocation(locationPrague)
+	c.AddFunc("0 0 * * * *", func() {
+		credit, expired, err := freshClient.GetCredit()
+		if err != nil {
+			log.Printf("Error getting credit: %v", err)
+			messageService.SendMessage(fmt.Sprintf("Error getting credit: %v", err), "")
+			return
+		}
+
+		log.Printf("Credit: %d, Expired: %d", credit, expired)
+		if credit < 100 {
+			messageService.SendMessage(fmt.Sprintf("Credit is low: %d", credit), "")
+		}
+		newRelicApp.RecordCustomMetric("Credit", float64(credit))
+		newRelicApp.RecordCustomMetric("ExpiredCredit", float64(expired))
+	})
 	c.AddFunc("0 5 0 * * 2", func() {
 		date := time.Now().In(locationPrague).AddDate(0, 0, 6).Format("2006-01-02")
 		startTime, err := time.ParseInLocation("2006-01-02 15:04", date+" 7:00", locationPrague)

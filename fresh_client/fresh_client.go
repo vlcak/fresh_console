@@ -69,6 +69,19 @@ type TrainingDetails struct {
 	}
 }
 
+type CreditRecord struct {
+	ID           int   `json:"id"`
+	CreditTypeID int   `json:"credit_type_id"`
+	LeftAmount   int   `json:"left_amount"`
+	ExpiresAt    int64 `json:"expires_at"`
+	CreatedAt    int64 `json:"created_at"`
+	Type         struct {
+		ID             int `json:"id"`
+		Amount         int `json:"amount"`
+		DurationMonths int `json:"duration_months"`
+	} `json:"type"`
+}
+
 func (td *TrainingDetails) GetUserName(userID int) string {
 	return td.userMap[userID].Name
 }
@@ -168,6 +181,34 @@ func (fc *FreshClient) FetchTrainingDetails(trainingID int) (*TrainingDetails, e
 	}
 
 	return &trainingDetails, nil
+}
+
+func (fc *FreshClient) GetCredit() (int, int, error) {
+	resp, err := fc.get(creditPath)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var credit []CreditRecord
+	err = json.Unmarshal(resp, &credit)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	creditSum := 0
+	expiredCreditSum := 0
+	now := time.Now().In(fc.timeZone)
+	for _, record := range credit {
+		if record.LeftAmount > 0 {
+			if time.UnixMilli(record.ExpiresAt).After(now) {
+				creditSum += record.LeftAmount
+			} else {
+				expiredCreditSum += record.LeftAmount
+			}
+		}
+	}
+
+	return creditSum, expiredCreditSum, nil
 }
 
 func (fc *FreshClient) Login(location int, startTime time.Time) error {
