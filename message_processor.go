@@ -50,6 +50,21 @@ func (mp *MessageProcessor) ProcessMessage(body io.ReadCloser) {
 	}
 
 	switch parsedMessage[0] {
+	case "FRESHTOKEN":
+		if len(parsedMessage) != 2 {
+			log.Printf("Invalid command format")
+			mp.messageService.SendMessage("Invalid command format", "")
+			return
+		}
+		mp.freshClient.UpdateToken(parsedMessage[1])
+		_, err := mp.freshClient.FetchLocations()
+		if err != nil {
+			log.Printf("Error fetching locations after token update: %v", err)
+			mp.messageService.SendMessage("Failed to fetch locations after token update: "+err.Error(), "")
+			return
+		}
+
+		mp.messageService.SendMessage("Token updated and working", "")
 	case "LOGIN":
 		date := time.Now().AddDate(0, 0, 7).Format("2.1.2006")
 		start := "7:00"

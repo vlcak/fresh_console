@@ -98,6 +98,10 @@ func NewFreshClient(token string) *FreshClient {
 	return &fc
 }
 
+func (fc *FreshClient) UpdateToken(token string) {
+	fc.token = token
+}
+
 func (fc *FreshClient) GetLocation(id int) Location {
 	return fc.locations[id]
 }
